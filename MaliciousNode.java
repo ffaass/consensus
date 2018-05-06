@@ -27,6 +27,7 @@ public class MaliciousNode implements Node {
     }
 
     public void receiveFromFollowees(Set<Candidate> candidates) {
+        // System.out.println();
         return;
     }
 }

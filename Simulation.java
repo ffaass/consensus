@@ -107,8 +107,10 @@ public class Simulation {
 
          // Distribute the Proposals to their intended recipients as Candidates
          for (int i = 0; i < numNodes; i++) {
-            if (allProposals.containsKey(i))
+            if (allProposals.containsKey(i)) {
+               // System.out.print("Round " + round + ", Node " + i + " ");
                nodes[i].receiveFromFollowees(allProposals.get(i));
+            }
          }
       }
 

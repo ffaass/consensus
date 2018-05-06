@@ -1,5 +1,7 @@
 import java.util.*;
+import java.util.stream.Collectors;
 
+import static java.util.stream.Collectors.toSet;
 
 /* CompliantNode refers to a node that follows the rules (not malicious)*/
 public class CompliantNode implements Node {
@@ -9,11 +11,10 @@ public class CompliantNode implements Node {
     private int numRounds;
 
     private Set<Transaction> pendingTransactions = new HashSet<>();
-    private Set<Transaction> acceptedTransactions = new HashSet<>();
+    private Map<Integer, Set<Transaction>> candidateHistory = new HashMap<>();
     private boolean[] followees;
-    private boolean[] trustedNode;
+    private boolean[] blacklist;
 
-    private double threshold;
 
 
     public CompliantNode(double p_graph, double p_malicious, double p_txDistribution, int numRounds) {
@@ -25,64 +26,61 @@ public class CompliantNode implements Node {
 
     public void setFollowees(boolean[] followees) {
         this.followees = followees;
-        this.trustedNode = new boolean[followees.length];
-        this.threshold = followees.length * this.pGraph * (1 - pMalicious) * pTxDistribution * numRounds;
+        this.blacklist = new boolean[followees.length];
     }
 
     public void setPendingTransaction(Set<Transaction> pendingTransactions) {
         this.pendingTransactions.addAll(pendingTransactions);
-        this.acceptedTransactions.addAll(pendingTransactions);
     }
 
     public Set<Transaction> sendToFollowers() {
-        return acceptedTransactions;
+        Set<Transaction> result = new HashSet<>(pendingTransactions);
+        pendingTransactions.clear();
+        return result;
     }
 
     public void receiveFromFollowees(Set<Candidate> candidates) {
-        Map<Transaction, Set<Integer>> nodesProposeTx = new HashMap<>();
+        Map<Integer, Long> proposeCount =
+                candidates.stream()
+                    .collect(Collectors.groupingBy(c -> c.sender, Collectors.counting()));
+
+        Long maxSize = proposeCount.entrySet().stream()
+                .max(Map.Entry.comparingByValue()).map(Map.Entry::getValue).orElse(0L);
+
+        Set<Integer> blacklistSet = proposeCount.entrySet().stream().filter(e -> e.getValue() < maxSize * pGraph)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+
+        for (int i : blacklistSet) {
+            blacklist[i] = true;
+        }
+
 
         for (Candidate c : candidates) {
-            if (pendingTransactions.contains(c.tx)) {
-                trustedNode[c.sender] = true;
-            }
-
-            Set<Integer> nodes = nodesProposeTx.getOrDefault(c.tx, new HashSet<>());
-            nodes.add(c.sender);
-            nodesProposeTx.put(c.tx, nodes);
-        }
-
-        Transaction maxTx = null;
-        int count = 0;
-
-        for (Transaction tx : nodesProposeTx.keySet()) {
-            if (count < nodesProposeTx.get(tx).size()) {
-                maxTx = tx;
-                count = nodesProposeTx.get(tx).size();
+            if (!blacklist[c.sender]) {
+                pendingTransactions.add(c.tx);
             }
         }
 
-        for (Candidate c : candidates) {
-            if (c.tx.equals(maxTx)) {
-                trustedNode[c.sender] = true;
+        /*
+        int blackCount = 0;
+        int fCount = 0;
+        System.out.print("followees ");
+        for (int i = 0; i < followees.length; i++) {
+            if (followees[i]) {
+                System.out.print(i + " ");
+                fCount++;
+            }
+        }
+        System.out.print("blacks ");
+        for (int i = 0; i < blacklist.length; i++) {
+            if (blacklist[i]) {
+                System.out.print(i + " ");
+                blackCount++;
             }
         }
 
-        Set<Transaction> txOverThreshold = new HashSet<>();
-        for (Transaction tx : nodesProposeTx.keySet()) {
-            if (nodesProposeTx.get(tx).size() >= threshold) {
-                txOverThreshold.add(tx);
-            }
-        }
-        for (Candidate c : candidates) {
-            if (txOverThreshold.contains(c.tx)) {
-                trustedNode[c.sender] = true;
-            }
-        }
-
-        for (Candidate c : candidates) {
-            if (trustedNode[c.sender]) {
-                acceptedTransactions.add(c.tx);
-            }
-        }
+        System.out.println("" + fCount + " followees, " + blackCount + " malicious node");
+        */
     }
 }
